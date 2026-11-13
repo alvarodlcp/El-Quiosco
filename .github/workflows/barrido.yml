@@ -1,0 +1,62 @@
+name: Barrido de portadas
+
+on:
+  schedule:
+    # Cada 30 minutos (a y 18 y a y 48). GitHub usa hora UTC, asi que se programa todo el dia
+    # y el paso "Comprobar hora" deja pasar solo los barridos entre las 5:48 y las 23:48 de Madrid.
+    - cron: "18,48 * * * *"
+  workflow_dispatch: {}   # boton "Run workflow" para lanzar un barrido a mano
+
+permissions:
+  contents: write
+
+concurrency:
+  group: barrido
+  cancel-in-progress: false
+
+jobs:
+  barrido:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comprobar hora (Madrid)
+        id: hora
+        shell: python
+        run: |
+          # Barridos de 5:48 a 23:48 (hora de Madrid). Margen de 40 min tras las 23:48 por retrasos de GitHub.
+          import os, datetime, zoneinfo
+          ahora = datetime.datetime.now(zoneinfo.ZoneInfo("Europe/Madrid"))
+          m = ahora.hour * 60 + ahora.minute
+          INICIO, FIN = 5 * 60 + 48, 23 * 60 + 48 + 40
+          ok = os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch" or INICIO - 10 <= m <= FIN
+          print("Hora en Madrid:", ahora.strftime("%H:%M"), "-> barrido" if ok else "-> se omite")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"ok={'true' if ok else 'false'}\n")
+      - uses: actions/checkout@v4
+        if: steps.hora.outputs.ok == 'true'
+      - uses: actions/setup-python@v5
+        if: steps.hora.outputs.ok == 'true'
+        with:
+          python-version: "3.12"
+      - name: Instalar dependencias
+        if: steps.hora.outputs.ok == 'true'
+        run: pip install -r requirements.txt
+      - name: Hacer el barrido
+        if: steps.hora.outputs.ok == 'true'
+        run: |
+          python barrido.py nuevo.json
+          python - <<'PY'
+          import json, sys
+          d = json.load(open("nuevo.json"))
+          llenos = sum(1 for v in d["periodicos"].values() if v)
+          print({k: len(v) for k, v in d["periodicos"].items()}, d.get("errores"))
+          sys.exit(0 if llenos >= 3 else 1)
+          PY
+          mv nuevo.json portadas.json
+      - name: Guardar noticias
+        if: steps.hora.outputs.ok == 'true'
+        run: |
+          git config user.name "barrido-bot"
+          git config user.email "barrido-bot@users.noreply.github.com"
+          git add portadas.json
+          git diff --cached --quiet || git commit -m "Barrido $(TZ=Europe/Madrid date '+%Y-%m-%d %H:%M')"
+          git push
