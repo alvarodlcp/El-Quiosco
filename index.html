@@ -95,10 +95,14 @@ if(location.hash&&PAPERS.some(p=>p[0]===location.hash.slice(1)))state.tab=locati
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const arch=u=>"https://archive.ph/submit/?url="+encodeURIComponent(u);
+// iPhone en modo app (iOS 17+): abrir los enlaces en Safari en lugar del navegador interno
+const iosVer=+((navigator.userAgent.match(/OS (\d+)_/)||[])[1]||0);
+const XSAFARI=navigator.standalone===true&&iosVer>=17;
+const ext=u=>XSAFARI&&/^https:\/\//.test(u)?"x-safari-"+u:u;
 const safeUrl=u=>/^https:\/\/[a-z0-9.-]+\.(es|com)\//i.test(u||"")?u:null;
 function fmt(iso){if(!iso)return"";const d=new Date(iso);if(isNaN(d))return"";return d.toLocaleString("es-ES",{weekday:"long",day:"numeric",month:"long",hour:"2-digit",minute:"2-digit",timeZone:"Europe/Madrid"})}
 function items(){return (state.data[state.tab]?.items||[]).filter(x=>safeUrl(x.u)&&x.t)}
-function card(x,cls=""){return `<div class="item ${cls}"><a class="tl" href="${esc(arch(x.u))}" target="_blank" rel="noopener"><div class="sec">${esc(x.s||"")}</div><h2>${esc(x.t)}</h2></a><div class="by">${x.a?`<span class="au">${esc(x.a)}</span>`:""}<a class="orig" href="${esc(x.u)}" target="_blank" rel="noopener" title="Abrir la noticia en la web del periódico">Original ↗</a></div></div>`}
+function card(x,cls=""){return `<div class="item ${cls}"><a class="tl" href="${esc(ext(arch(x.u)))}" target="_blank" rel="noopener"><div class="sec">${esc(x.s||"")}</div><h2>${esc(x.t)}</h2></a><div class="by">${x.a?`<span class="au">${esc(x.a)}</span>`:""}<a class="orig" href="${esc(ext(x.u))}" target="_blank" rel="noopener" title="Abrir la noticia en la web del periódico">Original ↗</a></div></div>`}
 function renderTabs(){
   $("#tabs").innerHTML=PAPERS.map(([id,n])=>{const c=(state.data[id]?.items||[]).length;return `<button class="tab" role="tab" aria-selected="${id===state.tab}" data-id="${id}">${esc(n)}${c?`<span class="n">${c}</span>`:""}</button>`}).join("");
 }
